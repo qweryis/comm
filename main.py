@@ -14,6 +14,7 @@ async def handler(ws, path):
             reply = f"Server echo: {message}"
             # broadcast reply back to sender
             print(reply)
+            reply["data"]
             await ws.send(reply)
     finally:
         connected.remove(ws)
