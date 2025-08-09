@@ -59,16 +59,17 @@ from twisted.mail import imap4, maildir
 import os
 from mailbox import Maildir
 
-# Use a string for convenience
-mailbox_path = 'mailbox'
-Maildir(mailbox_path, create=True)
+# Create Maildir on disk (string OK here)
+Maildir('mailbox', create=True)
+
+# But use bytes for the IMAP server path
+mailbox_path = b'mailbox'
 
 class MaildirIMAPServer(imap4.IMAP4Server):
     def __init__(self, userMailbox, *args, **kwargs):
         self.users = {'user': 'password'}
-        # Convert to bytes so Twisted’s MaildirMailbox doesn’t mix types
-        mb_path = userMailbox.encode('utf-8') if isinstance(userMailbox, str) else userMailbox
-        self.mailbox = maildir.MaildirMailbox(mb_path)
+        # path: bytes, factory: None, name: bytes
+        self.mailbox = maildir.MaildirMailbox(userMailbox, None, b"INBOX")
         super().__init__(*args, **kwargs)
 
     def authenticateUser(self, identity, password, context):
@@ -84,6 +85,7 @@ if __name__ == '__main__':
     reactor.listenTCP(1430, IMAPFactory())
     print("**IMAP server running on port 1430**")
     reactor.run()
+
 
 
 
