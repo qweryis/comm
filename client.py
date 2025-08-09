@@ -1,23 +1,22 @@
 import asyncio
 import websockets
 
-
 async def chat():
-    uri = "wss://comm-s1tw.onrender.com"
+    uri = "wss://comm-stw.onrender.com"
     async with websockets.connect(uri) as ws:
         print("Connected to server. Type messages below (Ctrl+C to exit).")
 
-        # start receiver task
+        # Receiver coroutine: handles incoming broadcasts
         async def receive():
             try:
                 async for msg in ws:
-                    print(f"Server: {msg}")
+                    print(f"\n<b>Peer:</b> {msg}\nYou: ", end="", flush=True)
             except websockets.ConnectionClosed:
-                pass
+                print("Connection closed by server.")
 
         recv_task = asyncio.create_task(receive())
 
-        # send loop
+        # Sender loop: reads user input and sends to server
         try:
             while True:
                 text = await asyncio.get_event_loop().run_in_executor(None, input, "You: ")
@@ -28,7 +27,6 @@ async def chat():
             pass
         finally:
             recv_task.cancel()
-
 
 if __name__ == "__main__":
     asyncio.run(chat())
