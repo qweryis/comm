@@ -2,28 +2,57 @@ import os
 import asyncio
 import websockets
 
-PORT = int(os.environ.get('PORT', 5000))
-connected = set()
+# <b>Port configuration</b>
+PORT = int(os.environ.get("PORT", 5000))
 
-async def handler(ws, path):
-    connected.add(ws)
+# <b>Buffers of undelivered messages per client ID</b>
+message_buffers: dict[str, list[str]] = {}
+
+# <b>Active WebSockets per client ID</b>
+active_clients: dict[str, websockets.WebSocketServerProtocol] = {}
+
+async def handler(ws: websockets.WebSocketServerProtocol, path: str):
+    # Derive a unique client_id (e.g., "/alice" → "alice")
+    client_id = path.lstrip("/")
+
+    # Ensure a buffer exists for this client
+    if client_id not in message_buffers:
+        message_buffers[client_id] = []
+
+    # Register this WebSocket as active
+    active_clients[client_id] = ws
+
+    # <b>Flush pending messages</b>
+    for msg in message_buffers[client_id]:
+        await ws.send(msg)
+    message_buffers[client_id].clear()
+
     try:
         async for message in ws:
-            print(f"Received: {message}")
-            reply = f"Server broadcast: {message}"
-            # Prepare tasks for all other clients
-            targets = [client for client in connected if client != ws]
-            if targets:
-                await asyncio.gather(*(client.send(reply) for client in targets))
-    except websockets.ConnectionClosed:
-        pass
+            broadcast = f"Server broadcast: {message}"
+
+            # 1) <b>Buffer for every client</b>
+            for buf in message_buffers.values():
+                buf.append(broadcast)
+
+            # 2) <b>Immediately send</b> to connected clients (excluding sender)
+            for cid, client_ws in list(active_clients.items()):
+                if cid != client_id and not client_ws.closed:
+                    try:
+                        await client_ws.send(broadcast)
+                    except websockets.ConnectionClosed:
+                        # Clean up closed connections
+                        active_clients.pop(cid, None)
+
     finally:
-        connected.remove(ws)
+        # On disconnect, remove from active_clients
+        active_clients.pop(client_id, None)
 
 if __name__ == "__main__":
     print(f"Starting server on port {PORT}")
     start_server = websockets.serve(handler, "0.0.0.0", PORT)
     asyncio.get_event_loop().run_until_complete(start_server)
     asyncio.get_event_loop().run_forever()
+
 
 
