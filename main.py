@@ -1,21 +1,25 @@
 import os
-from flask import Flask, render_template
-from flask_socketio import SocketIO, send
+import asyncio
+import websockets
 
-app = Flask(__name__)
-app.config['SECRET_KEY'] = 'your-secret-key'
-socketio = SocketIO(app, cors_allowed_origins="*")
+PORT = int(os.environ.get('PORT', 5000))
 
-@app.route('/')
-def index():
-    return render_template('index.html')
+connected = set()
 
-@socketio.on('message')
-def handle_message(msg):
-    print(f"Client: {msg}")
-    reply = f"Server echo: {msg}"
-    send(reply)
+async def handler(ws, path):
+    connected.add(ws)
+    try:
+        async for message in ws:
+            print(f"Client: {message}")
+            reply = f"Server echo: {message}"
+            # broadcast reply back to sender
+            await ws.send(reply)
+    finally:
+        connected.remove(ws)
 
-if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
-    socketio.run(app, host='0.0.0.0', port=port)
+if __name__ == "__main__":
+    print(f"Starting server on port {PORT}")
+    asyncio.get_event_loop().run_until_complete(
+        websockets.serve(handler, "0.0.0.0", PORT)
+    )
+    asyncio.get_event_loop().run_forever()
