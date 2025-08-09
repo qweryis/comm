@@ -2,7 +2,7 @@ import asyncio
 import websockets
 
 async def chat():
-    uri = "wss://comm-stw.onrender.com"
+    uri = "wss://comm-s1tw.onrender.com"
     async with websockets.connect(uri) as ws:
         print("Connected to server. Type messages below (Ctrl+C to exit).")
 
