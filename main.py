@@ -13,6 +13,7 @@ async def handler(ws, path):
             print(f"Client: {message}")
             reply = f"Server echo: {message}"
             # broadcast reply back to sender
+            print(reply)
             await ws.send(reply)
     finally:
         connected.remove(ws)
