@@ -56,24 +56,24 @@
 
 from twisted.internet import reactor, protocol
 from twisted.mail import imap4, maildir
-
-# Configure a Maildir mailbox at ./mailbox
-mailbox_path = 'mailbox'
-# Ensure Maildir exists
 import os
 from mailbox import Maildir
+
+# Use a string for convenience
+mailbox_path = 'mailbox'
 Maildir(mailbox_path, create=True)
 
 class MaildirIMAPServer(imap4.IMAP4Server):
-    # Use the Maildir as the backend store
     def __init__(self, userMailbox, *args, **kwargs):
-        self.users = {'user': 'password'}  # Simple user database
-        self.mailbox = maildir.MaildirMailbox(userMailbox)
-        imap4.IMAP4Server.__init__(self, *args, **kwargs)
+        self.users = {'user': 'password'}
+        # Convert to bytes so Twisted’s MaildirMailbox doesn’t mix types
+        mb_path = userMailbox.encode('utf-8') if isinstance(userMailbox, str) else userMailbox
+        self.mailbox = maildir.MaildirMailbox(mb_path)
+        super().__init__(*args, **kwargs)
 
     def authenticateUser(self, identity, password, context):
-        if identity in self.users and self.users[identity] == password:
-            return self.mailbox  # Return the Mailbox instance
+        if self.users.get(identity) == password:
+            return self.mailbox
         raise imap4.MailboxError("Authentication failed")
 
 class IMAPFactory(protocol.Factory):
@@ -81,9 +81,9 @@ class IMAPFactory(protocol.Factory):
         return MaildirIMAPServer(mailbox_path)
 
 if __name__ == '__main__':
-    # Listen on port 1430 (non-privileged for testing)
     reactor.listenTCP(1430, IMAPFactory())
     print("**IMAP server running on port 1430**")
     reactor.run()
+
 
 
