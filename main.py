@@ -1,58 +1,89 @@
+# import os
+# import asyncio
+# import websockets
+
+# # <b>Port configuration</b>
+# PORT = int(os.environ.get("PORT", 5000))
+
+# # <b>Buffers of undelivered messages per client ID</b>
+# message_buffers: dict[str, list[str]] = {}
+
+# # <b>Active WebSockets per client ID</b>
+# active_clients: dict[str, websockets.WebSocketServerProtocol] = {}
+
+# async def handler(ws: websockets.WebSocketServerProtocol, path: str):
+#     # Derive a unique client_id (e.g., "/alice" → "alice")
+#     client_id = path.lstrip("/")
+
+#     # Ensure a buffer exists for this client
+#     if client_id not in message_buffers:
+#         message_buffers[client_id] = []
+
+#     # Register this WebSocket as active
+#     active_clients[client_id] = ws
+
+#     # <b>Flush pending messages</b>
+#     for msg in message_buffers[client_id]:
+#         await ws.send(msg)
+#     message_buffers[client_id].clear()
+
+#     try:
+#         async for message in ws:
+#             broadcast = f"Server broadcast: {message}"
+
+#             # 1) <b>Buffer for every client</b>
+#             for buf in message_buffers.values():
+#                 buf.append(broadcast)
+
+#             # 2) <b>Immediately send</b> to connected clients (excluding sender)
+#             for cid, client_ws in list(active_clients.items()):
+#                 if cid != client_id and not client_ws.closed:
+#                     try:
+#                         await client_ws.send(broadcast)
+#                     except websockets.ConnectionClosed:
+#                         # Clean up closed connections
+#                         active_clients.pop(cid, None)
+
+#     finally:
+#         # On disconnect, remove from active_clients
+#         active_clients.pop(client_id, None)
+
+# if __name__ == "__main__":
+#     print(f"Starting server on port {PORT}")
+#     start_server = websockets.serve(handler, "0.0.0.0", PORT)
+#     asyncio.get_event_loop().run_until_complete(start_server)
+#     asyncio.get_event_loop().run_forever()
+
+from twisted.internet import reactor, protocol
+from twisted.mail import imap4, maildir
+
+# Configure a Maildir mailbox at ./mailbox
+mailbox_path = 'mailbox'
+# Ensure Maildir exists
 import os
-import asyncio
-import websockets
+from mailbox import Maildir
+Maildir(mailbox_path, create=True)
 
-# <b>Port configuration</b>
-PORT = int(os.environ.get("PORT", 5000))
+class MaildirIMAPServer(imap4.IMAP4Server):
+    # Use the Maildir as the backend store
+    def __init__(self, userMailbox, *args, **kwargs):
+        self.users = {'user': 'password'}  # Simple user database
+        self.mailbox = maildir.MaildirMailbox(userMailbox)
+        imap4.IMAP4Server.__init__(self, *args, **kwargs)
 
-# <b>Buffers of undelivered messages per client ID</b>
-message_buffers: dict[str, list[str]] = {}
+    def authenticateUser(self, identity, password, context):
+        if identity in self.users and self.users[identity] == password:
+            return self.mailbox  # Return the Mailbox instance
+        raise imap4.MailboxError("Authentication failed")
 
-# <b>Active WebSockets per client ID</b>
-active_clients: dict[str, websockets.WebSocketServerProtocol] = {}
+class IMAPFactory(protocol.Factory):
+    def buildProtocol(self, addr):
+        return MaildirIMAPServer(mailbox_path)
 
-async def handler(ws: websockets.WebSocketServerProtocol, path: str):
-    # Derive a unique client_id (e.g., "/alice" → "alice")
-    client_id = path.lstrip("/")
-
-    # Ensure a buffer exists for this client
-    if client_id not in message_buffers:
-        message_buffers[client_id] = []
-
-    # Register this WebSocket as active
-    active_clients[client_id] = ws
-
-    # <b>Flush pending messages</b>
-    for msg in message_buffers[client_id]:
-        await ws.send(msg)
-    message_buffers[client_id].clear()
-
-    try:
-        async for message in ws:
-            broadcast = f"Server broadcast: {message}"
-
-            # 1) <b>Buffer for every client</b>
-            for buf in message_buffers.values():
-                buf.append(broadcast)
-
-            # 2) <b>Immediately send</b> to connected clients (excluding sender)
-            for cid, client_ws in list(active_clients.items()):
-                if cid != client_id and not client_ws.closed:
-                    try:
-                        await client_ws.send(broadcast)
-                    except websockets.ConnectionClosed:
-                        # Clean up closed connections
-                        active_clients.pop(cid, None)
-
-    finally:
-        # On disconnect, remove from active_clients
-        active_clients.pop(client_id, None)
-
-if __name__ == "__main__":
-    print(f"Starting server on port {PORT}")
-    start_server = websockets.serve(handler, "0.0.0.0", PORT)
-    asyncio.get_event_loop().run_until_complete(start_server)
-    asyncio.get_event_loop().run_forever()
-
+if __name__ == '__main__':
+    # Listen on port 1430 (non-privileged for testing)
+    reactor.listenTCP(1430, IMAPFactory())
+    print("**IMAP server running on port 1430**")
+    reactor.run()
 
 
